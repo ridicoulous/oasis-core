@@ -15,6 +15,7 @@ import (
 	consensus "github.com/oasisprotocol/oasis-core/go/consensus/api"
 	ias "github.com/oasisprotocol/oasis-core/go/ias/api"
 	cmdFlags "github.com/oasisprotocol/oasis-core/go/oasis-node/cmd/common/flags"
+	"github.com/oasisprotocol/oasis-core/go/runtime/bundle"
 	"github.com/oasisprotocol/oasis-core/go/runtime/history"
 	runtimeHost "github.com/oasisprotocol/oasis-core/go/runtime/host"
 	hostMock "github.com/oasisprotocol/oasis-core/go/runtime/host/mock"
@@ -30,8 +31,7 @@ const (
 	CfgRuntimeProvisioner = "runtime.provisioner"
 	// CfgRuntimePaths confgures the paths for supported runtimes.
 	//
-	// The value should be a map of runtime IDs to corresponding resource paths (type of the
-	// resource depends on the provisioner).
+	// The value should be a vector of slices to the runtime bundles.
 	CfgRuntimePaths = "runtime.paths"
 	// CfgSandboxBinary configures the runtime sandbox binary location.
 	CfgSandboxBinary = "runtime.sandbox.binary"
@@ -39,10 +39,6 @@ const (
 	//
 	// The same loader is used for all runtimes.
 	CfgRuntimeSGXLoader = "runtime.sgx.loader"
-	// CfgRuntimeSGXSignatures configures signatures for supported runtimes.
-	//
-	// The value should be a map of runtime IDs to corresponding resource paths.
-	CfgRuntimeSGXSignatures = "runtime.sgx.signatures"
 
 	// CfgRuntimeConfig configures node-local runtime configuration.
 	CfgRuntimeConfig = "runtime.config"
@@ -152,7 +148,7 @@ type RuntimeHostConfig struct {
 	Runtimes map[common.Namespace]*runtimeHost.Config
 }
 
-func newConfig(consensus consensus.Backend, ias ias.Endpoint) (*RuntimeConfig, error) {
+func newConfig(dataDir string, consensus consensus.Backend, ias ias.Endpoint) (*RuntimeConfig, error) { //nolint: gocyclo
 	var cfg RuntimeConfig
 
 	// Parse configured runtime mode.
@@ -260,34 +256,44 @@ func newConfig(consensus consensus.Backend, ias ias.Endpoint) (*RuntimeConfig, e
 		}
 
 		// Configure runtimes.
-		runtimeSGXSignatures := viper.GetStringMapString(CfgRuntimeSGXSignatures)
-		rh.Runtimes = make(map[common.Namespace]*runtimeHost.Config)
-		for runtimeID, path := range viper.GetStringMapString(CfgRuntimePaths) {
-			var id common.Namespace
-			if err := id.UnmarshalHex(runtimeID); err != nil {
-				return nil, fmt.Errorf("bad runtime identifier '%s': %w", runtimeID, err)
+		for _, path := range viper.GetStringSlice(CfgRuntimePaths) {
+			// XXX: Special case the config if the mock provisioner is being
+			// used since it is unlikely that we will actually have a bundle.
+
+			// Open and explode the bundle.  This will call Validate().
+			bnd, err := bundle.Open(path)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load runtime bundle '%s': %w", path, err)
+			}
+			if err = bnd.WriteExploded(dataDir); err != nil {
+				return nil, fmt.Errorf("failed to explode runtime bundle '%s': %w", path, err)
+			}
+
+			id := bnd.Manifest.ID
+			if rh.Runtimes[id] != nil {
+				// TODO: Support multiple versions of the same runtime.  The
+				// old version of this used a map, but the new version uses
+				// a vector so we need to de-duplicate for now.
+				return nil, fmt.Errorf("runtime '%s' already configured", id)
 			}
 
 			// Unmarshal any local runtime configuration.
 			var localConfig map[string]interface{}
 			if sub := viper.Sub(CfgRuntimeConfig); sub != nil {
-				if err := sub.UnmarshalKey(runtimeID, &localConfig); err != nil {
+				if err := sub.UnmarshalKey(id.String(), &localConfig); err != nil {
 					return nil, fmt.Errorf("bad runtime configuration: %w", err)
 				}
 			}
 
 			runtimeHostCfg := &runtimeHost.Config{
-				RuntimeID:   id,
-				Path:        path,
+				Bundle:      bnd,
+				Path:        bnd.ExplodedPath(dataDir, bnd.Manifest.Executable),
 				LocalConfig: localConfig,
 			}
-
-			// This config is SGX specific, but that's all that's supported
-			// right now that needs this anyway, the non-SGX provisioner
-			// currently ignores this.
-			if sigPath := runtimeSGXSignatures[runtimeID]; sigPath != "" {
+			if bnd.Manifest.SGX != nil {
+				runtimeHostCfg.Path = bnd.ExplodedPath(dataDir, bnd.Manifest.SGX.Executable)
 				runtimeHostCfg.Extra = &hostSgx.RuntimeExtra{
-					SignaturePath: sigPath,
+					SignaturePath: bnd.ExplodedPath(dataDir, bnd.Manifest.SGX.Signature),
 				}
 			} else {
 				// HACK HACK HACK: Allow dummy SIGSTRUCT generation.
@@ -327,10 +333,9 @@ func newConfig(consensus consensus.Backend, ias ias.Endpoint) (*RuntimeConfig, e
 
 func init() {
 	Flags.String(CfgRuntimeProvisioner, RuntimeProvisionerSandboxed, "Runtime provisioner to use")
-	Flags.StringToString(CfgRuntimePaths, nil, "Paths to runtime resources (format: <rt1-ID>=<path>,<rt2-ID>=<path>)")
+	Flags.StringSlice(CfgRuntimePaths, nil, "Paths to runtime resources (format: <path>,<path>,...)")
 	Flags.String(CfgSandboxBinary, "/usr/bin/bwrap", "Path to the sandbox binary (bubblewrap)")
 	Flags.String(CfgRuntimeSGXLoader, "", "(for SGX runtimes) Path to SGXS runtime loader binary")
-	Flags.StringToString(CfgRuntimeSGXSignatures, nil, "(for SGX runtimes) Paths to signatures (format: <rt1-ID>=<path>,<rt2-ID>=<path>")
 
 	Flags.String(CfgHistoryPrunerStrategy, history.PrunerStrategyNone, "History pruner strategy")
 	Flags.Duration(CfgHistoryPrunerInterval, 2*time.Minute, "History pruning interval")
