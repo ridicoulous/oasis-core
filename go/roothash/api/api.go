@@ -414,7 +414,7 @@ type ExecutorCommittedEvent struct {
 
 // EventKind returns a string representation of this event's kind.
 func (e *ExecutorCommittedEvent) EventKind() string {
-	return "executor-committ"
+	return "executor_committ"
 }
 
 // ExecutionDiscrepancyDetectedEvent is an execute discrepancy detected event.
@@ -425,7 +425,7 @@ type ExecutionDiscrepancyDetectedEvent struct {
 
 // EventKind returns a string representation of this event's kind.
 func (e *ExecutionDiscrepancyDetectedEvent) EventKind() string {
-	return "execution-discrepancy"
+	return "execution_discrepancy"
 }
 
 var _ events.CustomTypedAttribute = (*RuntimeIDAttribute)(nil)
@@ -436,7 +436,7 @@ type RuntimeIDAttribute common.Namespace
 
 // EventKind returns a string representation of this event's kind.
 func (e RuntimeIDAttribute) EventKind() string {
-	return "runtime-id"
+	return "runtime_id"
 }
 
 // EventValue returns a string representation of this event's kind.
