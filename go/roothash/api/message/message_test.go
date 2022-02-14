@@ -97,7 +97,6 @@ func newTestRuntime() *registry.Runtime {
 			MaxMessages:       32,
 		},
 		TxnScheduler: registry.TxnSchedulerParameters{
-			Algorithm:         registry.TxnSchedulerSimple,
 			BatchFlushTimeout: 20 * time.Second,
 			MaxBatchSize:      1,
 			MaxBatchSizeBytes: 1024,
