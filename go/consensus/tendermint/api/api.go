@@ -2,8 +2,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -21,6 +21,7 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/common/node"
 	"github.com/oasisprotocol/oasis-core/go/common/pubsub"
 	consensus "github.com/oasisprotocol/oasis-core/go/consensus/api"
+	"github.com/oasisprotocol/oasis-core/go/consensus/api/events"
 	"github.com/oasisprotocol/oasis-core/go/consensus/api/transaction"
 	"github.com/oasisprotocol/oasis-core/go/consensus/tendermint/crypto"
 	mkvsNode "github.com/oasisprotocol/oasis-core/go/storage/mkvs/node"
@@ -84,27 +85,6 @@ func NodeToP2PAddr(n *node.Node) (*tmp2p.NetAddress, error) {
 	return tmAddr, nil
 }
 
-// TypedAttribute is an interface implemented by types which can be transparently used as event
-// attributes with CBOR-marshalled value.
-type TypedAttribute interface {
-	// EventKind returns a string representation of this event's kind.
-	EventKind() string
-}
-
-// CustomTypedAttribute is an interface implemented by types which can be transparently used as event
-// attributes with custom value encoding.
-type CustomTypedAttribute interface {
-	TypedAttribute
-
-	// EventValue returns a byte representation of this events value.
-	EventValue() []byte
-}
-
-// IsAttributeKind checks whether the given attribute key corresponds to the passed typed attribute.
-func IsAttributeKind(key []byte, kind TypedAttribute) bool {
-	return bytes.Equal(key, []byte(kind.EventKind()))
-}
-
 // EventBuilder is a helper for constructing ABCI events.
 type EventBuilder struct {
 	app []byte
@@ -124,14 +104,13 @@ func (bld *EventBuilder) attribute(key, value []byte) *EventBuilder {
 // TypedAttribute appends a typed attribute to the event.
 //
 // The typed attribute is automatically converted to a key/value pair where its EventKind is used
-// as the key and a CBOR-marshalled value is used as value.
-func (bld *EventBuilder) TypedAttribute(value TypedAttribute) *EventBuilder {
-	return bld.attribute([]byte(value.EventKind()), cbor.Marshal(value))
-}
+// as the key and EventValue is used as the value. Defaults to a base64 CBOR marshalled value.
+func (bld *EventBuilder) TypedAttribute(value events.TypedAttribute) *EventBuilder {
+	if value, ok := value.(events.CustomTypedAttribute); ok {
+		return bld.attribute([]byte(value.EventKind()), value.EventValue())
+	}
 
-// CustomTypedAttribute appends a typed attribute to the event.
-func (bld *EventBuilder) CustomTypedAttribute(value CustomTypedAttribute) *EventBuilder {
-	return bld.attribute([]byte(value.EventKind()), value.EventValue())
+	return bld.attribute([]byte(value.EventKind()), []byte(base64.StdEncoding.EncodeToString(cbor.Marshal(value))))
 }
 
 // Dirty returns true iff the EventBuilder has attributes.
@@ -163,7 +142,7 @@ func NewEventBuilder(app string) *EventBuilder {
 // EventTypeForApp generates the ABCI event type for events belonging
 // to the specified App.
 func EventTypeForApp(eventApp string) string {
-	return "oasis-event-" + eventApp
+	return "oasis_event_" + eventApp
 }
 
 // QueryForApp generates a tmquery.Query for events belonging to the

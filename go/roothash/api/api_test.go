@@ -650,3 +650,17 @@ func TestEquivocationExecutorEvidenceValidateBasic(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeIDAttribute(t *testing.T) {
+	var runtimeID common.Namespace
+	require.NoError(t, runtimeID.UnmarshalHex("8000000000000000000000000000000000000000000000000000000000000000"), "runtime id")
+
+	attribute := RuntimeIDAttribute(runtimeID)
+	val := attribute.EventValue()
+	require.EqualValues(t, val, "gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+
+	var attribute2 RuntimeIDAttribute
+	require.NoError(t, attribute2.DecodeValue(string(val)), "decode value")
+
+	require.EqualValues(t, attribute, attribute2, "value should round trip")
+}

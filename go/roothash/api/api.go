@@ -15,6 +15,7 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/common/logging"
 	"github.com/oasisprotocol/oasis-core/go/common/pubsub"
 	"github.com/oasisprotocol/oasis-core/go/common/quantity"
+	"github.com/oasisprotocol/oasis-core/go/consensus/api/events"
 	"github.com/oasisprotocol/oasis-core/go/consensus/api/transaction"
 	"github.com/oasisprotocol/oasis-core/go/oasis-node/cmd/common/flags"
 	registry "github.com/oasisprotocol/oasis-core/go/registry/api"
@@ -427,6 +428,8 @@ func (e *ExecutionDiscrepancyDetectedEvent) EventKind() string {
 	return "execution-discrepancy"
 }
 
+var _ events.CustomTypedAttribute = (*RuntimeIDAttribute)(nil)
+
 // RuntimeIDAttribute is the event attribute for specifying runtime ID.
 // ID is base64 encoded runtime ID.
 type RuntimeIDAttribute common.Namespace
@@ -440,6 +443,16 @@ func (e RuntimeIDAttribute) EventKind() string {
 func (e RuntimeIDAttribute) EventValue() []byte {
 	// This needs to be a text field as Tendermint does not support non-text queries.
 	return []byte(base64.StdEncoding.EncodeToString(e[:]))
+}
+
+// DecodeValue decodes the attribute event value.
+func (e *RuntimeIDAttribute) DecodeValue(value string) error {
+	rtId := common.Namespace{}
+	if err := rtId.UnmarshalBase64([]byte(value)); err != nil {
+		return err
+	}
+	copy(e[:], rtId[:])
+	return nil
 }
 
 // FinalizedEvent is a finalized event.
