@@ -42,6 +42,7 @@ var (
 		IndefLength:       cbor.IndefLengthForbidden,
 		TagsMd:            cbor.TagsForbidden,
 		ExtraReturnErrors: cbor.ExtraDecErrorUnknownField,
+		MaxArrayElements:  134217728, // Maximum allowed.
 		MaxMapPairs:       134217728, // Maximum allowed.
 	}
 
@@ -49,6 +50,7 @@ var (
 	// requested by using the UnmarshalTrusted method.
 	decOptionsTrusted = cbor.DecOptions{
 		MaxArrayElements: 134217728, // Maximum allowed.
+		MaxMapPairs:      134217728, // Maximum allowed.
 	}
 
 	encMode        cbor.EncMode
