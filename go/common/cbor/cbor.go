@@ -42,6 +42,8 @@ var (
 		IndefLength:       cbor.IndefLengthForbidden,
 		TagsMd:            cbor.TagsForbidden,
 		ExtraReturnErrors: cbor.ExtraDecErrorUnknownField,
+		MaxArrayElements:  134217728, // Maximum allowed. WARNING: hack for deserializing large genesis state at high blocks
+		MaxMapPairs:       134217728, // Maximum allowed. WARNING: hack for deserializing large genesis state at high blocks
 	}
 
 	// decOptionsTrusted are decoding options for TRUSTED inputs. They are only used when explicitly
